@@ -1,0 +1,5 @@
+.idea
+.env
+.vscode
+models
+data
