@@ -45,11 +45,27 @@ func NewLayer[T float.DType](c Config, id int) *Layer {
 	}
 }
 
-func (m *Layer) Forward(x ag.Node, state *LayerState) ag.Node {
+func (m *Layer) ForwardSingle(x ag.Node, state *LayerState) ag.Node {
 	if m.ID == 0 {
 		x = m.LN0.Forward(x)[0]
 	}
-	x = ag.Add(x, m.TimeMix.Forward(m.LN1.Forward(x)[0], state))
-	x = ag.Add(x, m.ChanMix.Forward(m.LN2.Forward(x)[0], state))
+	x = ag.Add(x, m.TimeMix.ForwardSingle(m.LN1.Forward(x)[0], state))
+	x = ag.Add(x, m.ChanMix.ForwardSingle(m.LN2.Forward(x)[0], state))
+	return x
+}
+
+func (m *Layer) ForwardSequence(x []ag.Node, state *LayerState) []ag.Node {
+	residual := func(other []ag.Node) []ag.Node {
+		for i := range x {
+			x[i] = ag.Add(x[i], other[i])
+		}
+		return x
+	}
+
+	if m.ID == 0 {
+		x = m.LN0.Forward(x...)
+	}
+	x = residual(m.TimeMix.ForwardSequence(m.LN1.Forward(x...), state))
+	x = residual(m.ChanMix.ForwardSequence(m.LN2.Forward(x...), state))
 	return x
 }

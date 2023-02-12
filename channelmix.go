@@ -42,7 +42,8 @@ func NewChannelMix[T float.DType](c Config, _ int) *ChannelMix {
 	}
 }
 
-func (m *ChannelMix) Forward(x ag.Node, state *LayerState) (rkv ag.Node) {
+// ForwardSingle performs the forward step for a single node.
+func (m *ChannelMix) ForwardSingle(x ag.Node, state *LayerState) (rkv ag.Node) {
 	xx := state.FfnXX
 	xk := ag.Add(ag.Prod(x, m.TimeMixK), ag.Prod(ag.ReverseSub(m.TimeMixK, one), xx))
 	xr := ag.Add(ag.Prod(x, m.TimeMixR), ag.Prod(ag.ReverseSub(m.TimeMixR, one), xx))
@@ -52,5 +53,31 @@ func (m *ChannelMix) Forward(x ag.Node, state *LayerState) (rkv ag.Node) {
 	k = ag.Square(ag.ReLU(k))
 	kv := ag.Mul(m.Value, k)
 	rkv = ag.Prod(ag.Sigmoid(ag.Mul(m.Receptance, xr)), kv)
+	return
+}
+
+// ForwardSequence performs the forward step for a sequence of nodes.
+// The state is updated with the last node of the sequence.
+func (m *ChannelMix) ForwardSequence(x []ag.Node, state *LayerState) (rkv []ag.Node) {
+	rkv = make([]ag.Node, len(x))
+
+	// token shift
+	xx := append([]ag.Node{state.FfnXX}, x[:len(x)-1]...)
+
+	// precompute coefficients
+	tmk := ag.ReverseSub(m.TimeMixK, one)
+	tmr := ag.ReverseSub(m.TimeMixR, one)
+
+	for i, xi := range x {
+		xk := ag.Add(ag.Prod(xi, m.TimeMixK), ag.Prod(tmk, xx[i]))
+		xr := ag.Add(ag.Prod(xi, m.TimeMixR), ag.Prod(tmr, xx[i]))
+
+		k := ag.Mul(m.Key, xk)
+		k = ag.Square(ag.ReLU(k))
+		kv := ag.Mul(m.Value, k)
+		rkv[i] = ag.Prod(ag.Sigmoid(ag.Mul(m.Receptance, xr)), kv)
+	}
+
+	state.FfnXX = x[len(x)-1]
 	return
 }
